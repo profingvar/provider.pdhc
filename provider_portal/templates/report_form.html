@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Submit Report — {{ task.receipt_token }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Submit Report</h1>
+    <p class="lead">Task: <code>{{ task.receipt_token }}</code></p>
+    <p class="text-muted">Patient: {{ task.patient_name or '—' }} | CarePlan: {{ task.careplan_title or '—' }}</p>
+  </div>
+  <a href="{{ url_for('web.task_detail', receipt_token=task.receipt_token) }}" class="btn btn-sm btn-secondary">Back to Task</a>
+</div>
+
+{% if transactions %}
+<div class="card">
+  <h2>Observations</h2>
+  <p class="text-muted mb-2">Fill in the observation values required by the care plan.</p>
+  <form method="post">
+    <input type="hidden" name="obs_count" value="{{ transactions|length }}">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Concept</th>
+            <th>Required</th>
+            <th style="width:180px">Value</th>
+            <th style="width:200px">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in transactions %}
+          <tr>
+            <td>
+              <strong>{{ tx.concept_name }}</strong>
+              {% if tx.unit %}<span class="text-muted"> ({{ tx.unit }})</span>{% endif %}
+              <br><span class="text-muted monospace" style="font-size:10px">{{ tx.concept_guid }}</span>
+              <input type="hidden" name="transaction_guid_{{ loop.index0 }}" value="{{ tx.transaction_guid }}">
+              <input type="hidden" name="activity_guid_{{ loop.index0 }}" value="{{ tx.activity_guid }}">
+              <input type="hidden" name="concept_guid_{{ loop.index0 }}" value="{{ tx.concept_guid }}">
+              <input type="hidden" name="concept_name_{{ loop.index0 }}" value="{{ tx.concept_name }}">
+            </td>
+            <td>
+              {% if tx.requirement_type == 'recommended' %}
+                <span class="badge badge-info">Recommended</span>
+              {% else %}
+                <span class="badge badge-warning">Required</span>
+              {% endif %}
+            </td>
+            <td>
+              <input type="text" name="value_{{ loop.index0 }}" class="form-control"
+                     placeholder="Enter value"
+                     {% if tx.requirement_type != 'recommended' %}required{% endif %}>
+            </td>
+            <td>
+              <input type="text" name="notes_{{ loop.index0 }}" class="form-control" placeholder="Optional">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-group" style="margin-top:1rem">
+      <label for="notes">General Notes (optional)</label>
+      <textarea id="notes" name="notes" class="form-control" rows="2"></textarea>
+    </div>
+    <div class="button-group">
+      <button type="submit" class="btn btn-success">Submit Observations</button>
+      <a href="{{ url_for('web.task_detail', receipt_token=task.receipt_token) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card" {% if transactions %}style="margin-top:1.5rem"{% endif %}>
+  <h2>Manual JSON Submission</h2>
+  <p class="text-muted mb-2">{% if transactions %}Alternatively, enter{% else %}Enter{% endif %} the provider payload as JSON.</p>
+  <form method="post">
+    <div class="form-group">
+      <label for="provider_payload">Provider Payload (JSON)</label>
+      <textarea id="provider_payload" name="provider_payload" class="form-control monospace" rows="10" required>{"notes": ""}</textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="notes_manual">Notes (optional)</label>
+        <textarea id="notes_manual" name="notes" class="form-control" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="receipt_message">Receipt Message (optional)</label>
+        <input type="text" id="receipt_message" name="receipt_message" class="form-control">
+      </div>
+    </div>
+    <div class="button-group">
+      <button type="submit" class="btn btn-success">Submit Report</button>
+      <a href="{{ url_for('web.task_detail', receipt_token=task.receipt_token) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

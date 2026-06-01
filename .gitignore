@@ -1,0 +1,40 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+
+# Symlinked private dependency
+provider_portal/pdhc_keyauth
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Runtime
+logs/
+*.log
+*.pid
+*.sock
+results/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.Rhistory
+.claude/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Stray local artifacts
+=*
+1.
+AT_fev1_plot.html
+*subscription_design copy*

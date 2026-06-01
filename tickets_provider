@@ -1,0 +1,39 @@
+1. [DONE] This is provider, an external producer of health data. I want it to receive requests as has been described in in ../sso_instrux in ../request.pdhc in ../gateway.pdhc and ../1177.pdhc
+2. [DONE] Create a plan for implementation
+3. [DONE] Do the implementation according to plan.
+4. [DONE] Update manuals and tech specs
+5. [DONE] What if provider wants to send content to an HTML widget in a patient dashboard. How could that be done. Some sort of graphics. → Design doc: docs/widget_content_design.md
+
+Ticket 2 [DONE] read the document data_package_reference.docx in provider.pdhc/docs and create an item list of needed reforms in provider.pdhc. Give the result after each added ticket in this document. Note that contract.pdhc.se, gateway  and request.pdhc are up and ready.
+
+--- Ticket 2 Results (Phase 4: Simplify outbound payload) ---
+
+Derived from data_package_reference.md Section 11 (Phase 4) and Section 2 (minimal return payload).
+Gateway now accepts minimal payload and derives org_guid from PAT, contract_guid from grant,
+concept_guid/unit/ranges from SR context.
+
+2.1 [DONE] upstream_client.py — submit_report() simplified
+   - Required params: service_request_guid, patient_guid, grant_token, status
+   - contract_guid and organisation_guid now optional kwargs (backward compat cross-check)
+   - Body sent: { patient_guid, grant_token, status, report_payload }
+   - contract_guid/organisation_guid included in body only if provided
+
+2.2 [DONE] status_callback.py — _push_via_composite_key() simplified
+   - No longer passes contract_guid or organisation_guid to submit_report()
+   - Gateway derives org_guid from PAT (X-Provider-Token) and contract_guid from grant
+
+2.3 [DONE] guided_response.py — build_payload() sends minimal fields
+   - Per observation: transaction_guid, value, recorded_at (+ notes if present)
+   - Removed concept_guid and unit — gateway derives from SR transaction map
+   - Notes field omitted entirely when empty (not sent as null)
+
+2.4 [DONE] Tests — 91 passed, 0 failed
+   - test_guided_response.py: updated build_payload test to verify concept_guid/unit excluded
+   - Added test_build_payload_minimal: verifies notes omitted when not present
+   - All existing tests pass (no breaking changes)
+
+Files modified:
+  provider_portal/app/services/upstream_client.py
+  provider_portal/app/services/status_callback.py
+  provider_portal/app/services/guided_response.py
+  provider_portal/tests/test_guided_response.py

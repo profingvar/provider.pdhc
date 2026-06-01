@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Task {{ task.receipt_token }} — PDHC Provider Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Task Detail</h1>
+    <p class="lead"><code>{{ task.receipt_token }}</code></p>
+  </div>
+  <div class="button-group-sm">
+    <a href="{{ url_for('web.task_list') }}" class="btn btn-sm btn-secondary">Back to Tasks</a>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Task Information</h2>
+    <div class="detail-grid">
+      <span class="detail-label">GUID</span>
+      <span class="detail-value monospace">{{ task.guid }}</span>
+      <span class="detail-label">Status</span>
+      <span class="detail-value">
+        {% if task.status == 'dispatched' %}
+          <span class="badge badge-warning">Dispatched</span>
+        {% elif task.status == 'acknowledged' %}
+          <span class="badge badge-info">Acknowledged</span>
+        {% elif task.status == 'completed' %}
+          <span class="badge badge-success">Completed</span>
+        {% elif task.status == 'cancelled' %}
+          <span class="badge badge-danger">Cancelled</span>
+        {% else %}
+          <span class="badge">{{ task.status }}</span>
+        {% endif %}
+      </span>
+      <span class="detail-label">Patient</span>
+      <span class="detail-value">{{ task.patient_name or '—' }}</span>
+      <span class="detail-label">Patient GUID</span>
+      <span class="detail-value monospace">{{ task.patient_guid or '—' }}</span>
+      <span class="detail-label">CarePlan</span>
+      <span class="detail-value">{{ task.careplan_title or '—' }}</span>
+      <span class="detail-label">CarePlan GUID</span>
+      <span class="detail-value monospace">{{ task.careplan_guid or '—' }}</span>
+      <span class="detail-label">Dispatched</span>
+      <span class="detail-value">{{ task.dispatched_at.strftime('%Y-%m-%d %H:%M UTC') if task.dispatched_at else '—' }}</span>
+      <span class="detail-label">Due</span>
+      <span class="detail-value">{{ task.due_at.strftime('%Y-%m-%d %H:%M UTC') if task.due_at else '—' }}</span>
+      <span class="detail-label">Acknowledged</span>
+      <span class="detail-value">{{ task.acknowledged_at.strftime('%Y-%m-%d %H:%M UTC') if task.acknowledged_at else '—' }}</span>
+      <span class="detail-label">Completed</span>
+      <span class="detail-value">{{ task.completed_at.strftime('%Y-%m-%d %H:%M UTC') if task.completed_at else '—' }}</span>
+      <span class="detail-label">Priority</span>
+      <span class="detail-value">{{ task.priority or 'routine' }}</span>
+      <span class="detail-label">Notes</span>
+      <span class="detail-value">{{ task.notes or '—' }}</span>
+      {% if task.request_guid %}
+      <span class="detail-label">Upstream</span>
+      <span class="detail-value monospace">{{ task.request_guid }}</span>
+      {% endif %}
+      {% if inbound %}
+      <span class="detail-label">Provider Status</span>
+      <span class="detail-value">{{ inbound.provider_status or '—' }}</span>
+      <span class="detail-label">Last Synced</span>
+      <span class="detail-value">{{ inbound.last_synced_at.strftime('%Y-%m-%d %H:%M:%S UTC') if inbound.last_synced_at else '—' }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    {% if task.status == 'dispatched' %}
+    <div class="card">
+      <h2>Acknowledge Task</h2>
+      <p class="text-muted mb-2">Confirm that you have received this task and will begin work.</p>
+      <form method="post" action="{{ url_for('web.accept_task', receipt_token=task.receipt_token) }}">
+        <div class="form-group">
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes" name="notes" class="form-control" rows="3"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Acknowledge Task</button>
+      </form>
+    </div>
+    {% elif task.status == 'acknowledged' %}
+    <div class="card" style="border-left: 4px solid var(--success); padding-left: 1rem;">
+      <h2>Task Acknowledged</h2>
+      <p>Acknowledged at <strong>{{ task.acknowledged_at.strftime('%Y-%m-%d %H:%M UTC') if task.acknowledged_at else '—' }}</strong></p>
+      <p class="text-muted">You can now submit observations via the report form below.</p>
+    </div>
+    {% elif task.status == 'completed' %}
+    <div class="card" style="border-left: 4px solid var(--success); padding-left: 1rem;">
+      <h2>Task Completed</h2>
+      <p>Completed at <strong>{{ task.completed_at.strftime('%Y-%m-%d %H:%M UTC') if task.completed_at else '—' }}</strong></p>
+    </div>
+    {% endif %}
+
+    {% if task.status in ('acknowledged', 'in_progress') %}
+    <div class="card" style="margin-top:1rem">
+      <h2>Submit Observations</h2>
+      <p class="text-muted">Enter observation values for the required measurements.</p>
+      <a href="{{ url_for('web.submit_report', receipt_token=task.receipt_token) }}" class="btn btn-success">Go to Report Form</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if careplan %}
+<div class="card mt-2">
+  <h2>Care Plan</h2>
+  {% if careplan.description %}
+  <p>{{ careplan.description }}</p>
+  {% endif %}
+
+  {% if careplan.goal %}
+  <h3 style="margin-top:1rem">Goals</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Goal</th><th>Target</th><th>Priority</th></tr>
+      </thead>
+      <tbody>
+        {% for gref in careplan.goal %}
+          {% set goal = goals_by_id.get(gref.reference|replace('#','')) %}
+          {% if goal %}
+          <tr>
+            <td>{{ goal.description.text if goal.description else '—' }}</td>
+            <td>
+              {% if goal.target %}
+                {% set t = goal.target[0] %}
+                {% if t.detailQuantity is defined %}
+                  {{ t.detailQuantity.comparator|default('') }} {{ t.detailQuantity.value }}
+                {% elif t.detailRange is defined %}
+                  {{ t.detailRange.low.value|default('') }} – {{ t.detailRange.high.value|default('') }}
+                {% elif t.detailCodeableConcept is defined %}
+                  {{ t.detailCodeableConcept.text|default('') }}
+                {% else %}
+                  —
+                {% endif %}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              {% if goal.priority and goal.priority.coding %}
+                {{ goal.priority.coding[0].code }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if careplan.activity %}
+  <h3 style="margin-top:1rem">Activities</h3>
+  {% for act in careplan.activity %}
+  <div class="card" style="margin:0.5rem 0; padding:0.75rem 1rem; background:var(--bg-secondary, #f8f9fa);">
+    {% set detail = act.detail or {} %}
+    {% if detail.code and detail.code.text %}
+      <strong>{{ detail.code.text }}</strong>
+    {% endif %}
+    {% if detail.description %}
+      <p style="margin:0.25rem 0">{{ detail.description }}</p>
+    {% endif %}
+
+    {% if detail.scheduledTiming and detail.scheduledTiming.repeat %}
+      {% set rep = detail.scheduledTiming.repeat %}
+      <p class="text-muted" style="margin:0.25rem 0">
+        Timing:
+        {% if rep.frequency %}{{ rep.frequency }}x per {{ rep.period|default(1) }} {{ rep.periodUnit|default('d') }}{% endif %}
+        {% if rep.duration %} | Duration: {{ rep.duration }} {{ rep.durationUnit|default('min') }}{% endif %}
+      </p>
+    {% endif %}
+
+    {% if detail.performer %}
+      <p class="text-muted" style="margin:0.25rem 0">Performer: {{ detail.performer[0].display }}</p>
+    {% endif %}
+
+    {% set txns = act['_pdhc_transactions'] if '_pdhc_transactions' in act else [] %}
+    {% if txns %}
+    <div class="table-wrap" style="margin-top:0.5rem">
+      <table>
+        <thead>
+          <tr><th>Measurement</th><th>Required</th><th>Expected</th><th>Range</th></tr>
+        </thead>
+        <tbody>
+          {% for tx in txns %}
+          <tr>
+            <td>{{ tx.concept_name|default('—') }}</td>
+            <td>
+              {% if tx.requirement_type == 'recommended' %}
+                <span class="badge badge-info">Recommended</span>
+              {% else %}
+                <span class="badge badge-warning">Required</span>
+              {% endif %}
+            </td>
+            <td>{{ tx.expected_value|default('—') }}</td>
+            <td>
+              {% if tx.range_min is defined or tx.range_max is defined %}
+                {{ tx.range_min|default('') }} – {{ tx.range_max|default('') }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif detail.code and detail.code.coding %}
+    <div class="table-wrap" style="margin-top:0.5rem">
+      <table>
+        <thead>
+          <tr><th>Measurement</th><th>Required</th></tr>
+        </thead>
+        <tbody>
+          {% for coding in detail.code.coding %}
+          <tr>
+            <td>{{ coding.display|default(coding.code) }}</td>
+            <td><span class="badge badge-warning">Required</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if sr_notes %}
+<div class="card mt-2">
+  <h2>Requester Notes</h2>
+  <p>{{ sr_notes }}</p>
+</div>
+{% endif %}
+
+{% if audit_entries %}
+<div class="card mt-2">
+  <h2>Audit Trail</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Timestamp</th>
+          <th>GUID</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in audit_entries %}
+        <tr>
+          <td>
+            {% if entry.action == 'acknowledge' %}
+              <span class="badge badge-info">Acknowledge</span>
+            {% elif entry.action == 'report' %}
+              <span class="badge badge-success">Report</span>
+            {% else %}
+              <span class="badge">{{ entry.action }}</span>
+            {% endif %}
+          </td>
+          <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+          <td class="monospace">{{ entry.guid }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

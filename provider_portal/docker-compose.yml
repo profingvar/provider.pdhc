@@ -1,0 +1,45 @@
+name: provider1
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: provider1_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-provider_portal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-provider_portal_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-provider_portal_db}
+    ports:
+      # Ticket #76: pin host interface so only localhost (= reverse proxy) can
+      # reach the DB/app. Without the 127.0.0.1: prefix docker binds to 0.0.0.0
+      # and the colima ssh-mux forwarder exposes *:9071 on the LAN
+      # (CLAUDE.md §3 violation).
+      - "127.0.0.1:9071:5432"
+    volumes:
+      - provider1_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-provider_portal}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: provider1_app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-provider_portal}:${POSTGRES_PASSWORD:-provider_portal_dev}@db:5432/${POSTGRES_DB:-provider_portal_db}
+    ports:
+      - "127.0.0.1:9070:9070"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(\"http://localhost:9070/api/v1/health\")"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  provider1_pgdata:

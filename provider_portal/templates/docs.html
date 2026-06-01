@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Documentation — PDHC Provider Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Documentation</h1>
+    <p class="lead">Guides for using and integrating with the Provider Portal</p>
+  </div>
+</div>
+
+<div class="dash-grid">
+  <div class="card">
+    <h2>User Guide</h2>
+    <p>For healthcare professionals and provider administrators. Covers how to view tasks, accept requests, submit reports, and understand care plans.</p>
+    <p style="margin-top:0.75rem">
+      <a href="{{ url_for('web.download_doc', doc_name='user-guide') }}" class="btn btn-primary">
+        Download User Guide
+      </a>
+    </p>
+  </div>
+  <div class="card">
+    <h2>Technical Integration Guide</h2>
+    <p>For developers. Covers API endpoints, authentication (PAT), FHIR data formats, composite key security model, push/poll delivery, and configuration.</p>
+    <p style="margin-top:0.75rem">
+      <a href="{{ url_for('web.download_doc', doc_name='technical-guide') }}" class="btn btn-primary">
+        Download Technical Guide
+      </a>
+    </p>
+  </div>
+</div>
+{% endblock %}
