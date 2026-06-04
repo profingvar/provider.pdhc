@@ -5,6 +5,21 @@
 # Rule 22: takes precaution to prevent disturbance of other reverse proxy services
 set -e
 
+# Step-tracked failure logging — set -e exits on the first error
+# but says nothing about *what* failed; the trap below logs the
+# step that was active so the operator doesn't have to guess.
+# Ticket #236.
+CURRENT_STEP="(initialising)"
+_on_exit() {
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo >&2
+        echo "[safe_restart] FAILED at step: ${CURRENT_STEP} (exit $rc)" >&2
+        echo "[safe_restart] Service may be in DEGRADED state — verify gunicorn + DB before walking away." >&2
+    fi
+}
+trap _on_exit EXIT
+
 PORTS=(9070 9071 9072 9073)
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$PROJECT_DIR/provider_portal"
@@ -23,6 +38,7 @@ warn() { echo -e "${YELLOW}[safe_restart]${NC} $1"; }
 err()  { echo -e "${RED}[safe_restart]${NC} $1" >&2; }
 
 # --- Stop mode ---
+CURRENT_STEP='stop mode (--stop flag)'
 if [ "${1:-}" = "stop" ]; then
     log "Stopping provider_portal..."
     cd "$APP_DIR"
@@ -35,6 +51,7 @@ if [ "${1:-}" = "stop" ]; then
 fi
 
 # --- Pre-flight checks ---
+CURRENT_STEP='pre-flight checks (docker / .env / SECRET_KEY / nginx config)'
 log "Pre-flight checks..."
 
 # Check Docker is running
@@ -74,6 +91,7 @@ if command -v nginx >/dev/null 2>&1; then
 fi
 
 # --- Backup database before restart ---
+CURRENT_STEP='database backup'
 log "Backing up database..."
 mkdir -p "$BACKUP_DIR"
 cd "$APP_DIR"
@@ -87,6 +105,7 @@ else
 fi
 
 # --- Gracefully stop existing services ---
+CURRENT_STEP='stop existing services'
 log "Stopping existing services..."
 for port in "${PORTS[@]}"; do
     PID=$(lsof -ti :"$port" 2>/dev/null || true)
@@ -103,6 +122,7 @@ done
 docker compose down 2>/dev/null || true
 
 # --- Setup venv ---
+CURRENT_STEP='setup venv + pip install'
 if [ ! -d "$VENV_DIR" ]; then
     log "Creating virtual environment..."
     python3 -m venv "$VENV_DIR"
@@ -113,6 +133,7 @@ log "Installing dependencies..."
 pip install -q -r "$APP_DIR/requirements.txt"
 
 # --- Start database ---
+CURRENT_STEP='start database container + wait for ready'
 log "Starting PostgreSQL on port 9071..."
 cd "$APP_DIR"
 docker compose up -d db
@@ -133,6 +154,7 @@ fi
 log "PostgreSQL is ready."
 
 # --- Run migrations ---
+CURRENT_STEP='flask db upgrade'
 export FLASK_APP=app
 if [ ! -d "migrations/versions" ]; then
     log "Initializing migrations..."
@@ -143,6 +165,7 @@ log "Running migrations..."
 flask db upgrade
 
 # --- Start application ---
+CURRENT_STEP='start gunicorn'
 log "Starting provider_portal on port 9070..."
 gunicorn --bind 0.0.0.0:9070 --workers 2 --timeout 120 "app:create_app()" \
     --access-logfile "$PROJECT_DIR/logs/access.log" \
@@ -154,6 +177,7 @@ gunicorn --bind 0.0.0.0:9070 --workers 2 --timeout 120 "app:create_app()" \
 mkdir -p "$PROJECT_DIR/logs"
 
 # --- Verify ---
+CURRENT_STEP='verify gunicorn responds'
 sleep 2
 if curl -sf http://localhost:9070/ >/dev/null 2>&1; then
     log "Provider Portal is running at http://localhost:9070"
@@ -163,6 +187,7 @@ else
 fi
 
 # --- Reload nginx if present (Rule 22) ---
+CURRENT_STEP='nginx reload'
 if command -v nginx >/dev/null 2>&1; then
     log "Reloading nginx (graceful)..."
     nginx -s reload 2>/dev/null || warn "nginx reload failed — may need manual reload"
