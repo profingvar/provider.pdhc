@@ -519,3 +519,13 @@ All errors follow the format:
 | `grant_token` | String(128) | HMAC token for authorised data exchange |
 | `careplan_json` | JSON | Extracted CarePlan from FHIR resource |
 | `checksum` | String(64) | SHA-256 for change detection |
+
+## Port Allocation
+
+All ports bind to `127.0.0.1` (loopback only); external traffic arrives
+via the reverse proxy.
+
+| Port | Service |
+|------|---------|
+| 9070 | Flask application (Gunicorn) |
+| 9071 | PostgreSQL database |
