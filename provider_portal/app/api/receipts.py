@@ -3,6 +3,7 @@
 When gateway.pdhc accepts an observation report, it pushes a receipt back
 to provider.pdhc confirming storage. Auth via internal service key.
 """
+import hmac
 import logging
 from datetime import datetime, timezone
 from flask import request, jsonify, current_app
@@ -42,7 +43,12 @@ def ingest_receipt():
         return jsonify({'code': 'not_configured', 'message': 'Gateway receipt ingestion not configured'}), 503
 
     service_key = request.headers.get('X-Service-Key')
-    if not service_key or service_key not in accepted_keys:
+    # Constant-time compare against each accepted key (avoid a timing
+    # side-channel on the shared secret; `in` short-circuits per-char).
+    # Encode to bytes so a non-ASCII header can't raise instead of 401.
+    if not service_key or not any(
+            hmac.compare_digest(service_key.encode(), k.encode())
+            for k in accepted_keys):
         logger.warning('Receipt ingest rejected: invalid X-Service-Key from %s', request.remote_addr)
         return jsonify({'code': 'unauthenticated', 'message': 'Invalid service key'}), 401
 
