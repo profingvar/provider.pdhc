@@ -114,12 +114,19 @@ def _process_push(fhir_resource, receipt_token, grant_token,
     provider_guid = current_app.config.get('PROVIDER_GUID')
     sr_guid = fhir_resource.get('id', receipt_token)
 
-    # Extract patient info from FHIR subject
+    # Extract the patient guid from the SR subject. request.pdhc dispatches
+    # the patient as a CONTAINED resource, so the reference is
+    # "#patient-<guid>" — NOT "Patient/<guid>". Handle both forms (plus a
+    # bare contained ref) so inbound.patient_guid is populated: the report
+    # push guard refuses to send observations to the gateway without it.
     patient_guid = None
-    subject = fhir_resource.get('subject', {})
-    ref = subject.get('reference', '')
+    ref = (fhir_resource.get('subject') or {}).get('reference', '') or ''
     if ref.startswith('Patient/'):
         patient_guid = ref.split('/', 1)[1]
+    elif ref.startswith('#patient-'):
+        patient_guid = ref[len('#patient-'):]
+    elif ref.startswith('#'):
+        patient_guid = ref[1:]
 
     # Extract contract guid: prefer meta.tag, fall back to basedOn
     contract_guid = tag_contract_guid
@@ -150,6 +157,10 @@ def _process_push(fhir_resource, receipt_token, grant_token,
         existing.grant_expires_at = grant_expires_at
         existing.checksum = InboundRequest.compute_checksum(fhir_resource)
         existing.last_synced_at = db.func.now()
+        # Backfill patient_guid on re-sync (older rows may predate the
+        # contained-reference parse fix above).
+        if patient_guid and not existing.patient_guid:
+            existing.patient_guid = patient_guid
         db.session.commit()
         return {'request_guid': sr_guid, 'action': 'updated'}
 
