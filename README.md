@@ -10,8 +10,12 @@ makes them available to a clinical provider (e.g. a remote-monitoring
 or follow-up clinic), and submits the resulting observations and
 reports back through `gateway.pdhc`.
 
-The first concrete deployment of this codebase is the **Medituner**
-integration (asthma / COPD remote follow-up).
+The reference deployment of this codebase is the **Provider1** portal
+(`provider1.pdhc.se`) — a demo external provider running asthma / COPD
+remote follow-up. Note: "Provider1" is this reference portal's own
+identity and is deliberately distinct from the real external partner
+**Medituner AB** (SSO org `7a69ab02…`), which runs its own receiver
+rather than this portal.
 
 ## What this service does
 

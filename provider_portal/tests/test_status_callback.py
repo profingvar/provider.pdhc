@@ -13,7 +13,7 @@ from app.models import InboundRequest
 from app.services.status_callback import StatusCallbackService
 
 
-def _make_inbound(receipt_token='rt-1', provider_guid='medituner',
+def _make_inbound(receipt_token='rt-1', provider_guid='provider1',
                   with_grant=True, with_patient=True):
     inbound = InboundRequest(
         receipt_token=receipt_token,
@@ -44,7 +44,7 @@ def test_report_with_payload_requires_gateway_url(app, caplog):
          patch.object(StatusCallbackService, '_push_legacy') as legacy:
         with caplog.at_level('ERROR'):
             StatusCallbackService.push_status(
-                'rt-1', 'medituner', 'completed',
+                'rt-1', 'provider1', 'completed',
                 report_payload={'observations': [{'value': 7.2}]},
             )
 
@@ -63,7 +63,7 @@ def test_report_with_payload_uses_gateway_when_configured(app):
 
     with patch.object(StatusCallbackService, '_push_via_composite_key') as composite:
         StatusCallbackService.push_status(
-            'rt-1', 'medituner', 'completed',
+            'rt-1', 'provider1', 'completed',
             report_payload={'observations': [{'value': 7.2}]},
         )
         composite.assert_called_once()
@@ -81,7 +81,7 @@ def test_status_only_still_routes_to_request_pdhc(app):
 
     with patch.object(StatusCallbackService, '_push_via_composite_key') as composite:
         StatusCallbackService.push_status(
-            'rt-1', 'medituner', 'acknowledged',  # no report_payload
+            'rt-1', 'provider1', 'acknowledged',  # no report_payload
         )
         composite.assert_called_once()
         base_url_used = composite.call_args.args[0]
@@ -99,7 +99,7 @@ def test_report_with_payload_blocked_when_grant_missing(app, caplog):
     with patch.object(StatusCallbackService, '_push_via_composite_key') as composite:
         with caplog.at_level('ERROR'):
             StatusCallbackService.push_status(
-                'rt-1', 'medituner', 'completed',
+                'rt-1', 'provider1', 'completed',
                 report_payload={'observations': [{'value': 7.2}]},
             )
         composite.assert_not_called()
