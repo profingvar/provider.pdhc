@@ -27,6 +27,13 @@ class Config:
     GATEWAY_SERVICE_URL = os.environ.get('GATEWAY_SERVICE_URL', 'https://gateway.pdhc.se/api/v1')
     GATEWAY_SERVICE_KEY = os.environ.get('GATEWAY_SERVICE_KEY')  # internal key for gateway.pdhc receipts
 
+    # plan.pdhc — authority on per-concept response type / unit / limits.
+    # Used to render the guided report form's widgets (number/slider/
+    # boolean/choice) with the care plan's units and limits. Public read
+    # (no auth). Inside the container the loopback default is unreachable,
+    # so the server .env points this at host.docker.internal:9030.
+    PLAN_BASE_URL = os.environ.get('PLAN_BASE_URL', 'https://plan.pdhc.se')
+
     # Sync settings
     SYNC_INTERVAL_SECONDS = int(os.environ.get('SYNC_INTERVAL_SECONDS', '60'))
     SYNC_ENABLED = os.environ.get('SYNC_ENABLED', 'false').lower() in ('true', '1', 'yes')

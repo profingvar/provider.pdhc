@@ -11,54 +11,112 @@
   <a href="{{ url_for('web.task_detail', receipt_token=task.receipt_token) }}" class="btn btn-sm btn-secondary">Back to Task</a>
 </div>
 
+{# One reading row (value widget + timestamp + note). Used both inline for
+   the first reading and inside a <template> for JS-added readings, where j
+   is the literal placeholder "__J__". #}
+{% macro reading(i, j, tx, first=False) %}
+{% set req = (tx.requirement_type or 'required') == 'required' %}
+<div class="reading-row" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.3rem 0;">
+  <div style="display:flex;align-items:center;gap:.35rem;">
+    {% if tx.kind == 'slider' %}
+      <input type="range" name="value_{{ i }}_{{ j }}"
+             min="{{ tx.min if tx.min is not none else 0 }}"
+             max="{{ tx.max if tx.max is not none else 10 }}"
+             step="{{ tx.step or 'any' }}"
+             oninput="this.nextElementSibling.value=this.value"
+             {% if first and req %}value="{{ tx.min if tx.min is not none else 0 }}"{% endif %}
+             style="width:160px;">
+      <output style="min-width:2.2em;font-weight:600;">{{ tx.min if tx.min is not none else 0 }}</output>
+    {% elif tx.kind == 'boolean' %}
+      <select name="value_{{ i }}_{{ j }}" class="form-control" style="width:110px;"
+              {% if first and req %}required{% endif %}>
+        <option value="">—</option>
+        <option value="true">Yes</option>
+        <option value="false">No</option>
+      </select>
+    {% elif tx.kind in ('single_choice', 'multi_choice') and tx.options %}
+      <select name="value_{{ i }}_{{ j }}" class="form-control" style="width:180px;"
+              {% if tx.kind == 'multi_choice' %}multiple{% endif %}
+              {% if first and req %}required{% endif %}>
+        {% if tx.kind != 'multi_choice' %}<option value="">—</option>{% endif %}
+        {% for opt in tx.options %}<option value="{{ opt.code }}">{{ opt.label }}</option>{% endfor %}
+      </select>
+    {% else %}
+      <input type="{{ 'number' if tx.kind in ('number','integer') else 'text' }}"
+             name="value_{{ i }}_{{ j }}" class="form-control" style="width:130px;"
+             {% if tx.min is not none %}min="{{ tx.min }}"{% endif %}
+             {% if tx.max is not none %}max="{{ tx.max }}"{% endif %}
+             {% if tx.step %}step="{{ tx.step }}"{% endif %}
+             placeholder="Value" {% if first and req %}required{% endif %}>
+    {% endif %}
+    {% if tx.unit %}<span class="text-muted" style="font-size:.85em;">{{ tx.unit }}</span>{% endif %}
+  </div>
+  <input type="datetime-local" name="recorded_{{ i }}_{{ j }}" class="form-control"
+         style="width:200px;" title="When recorded (defaults to now)">
+  <input type="text" name="note_{{ i }}_{{ j }}" class="form-control"
+         style="width:160px;" placeholder="Note (optional)">
+  <button type="button" class="btn btn-sm btn-secondary reading-remove"
+          onclick="this.closest('.reading-row').remove()"
+          style="{% if first %}visibility:hidden;{% endif %}">✕</button>
+</div>
+{% endmacro %}
+
 {% if transactions %}
 <div class="card">
   <h2>Observations</h2>
-  <p class="text-muted mb-2">Fill in the observation values required by the care plan.</p>
+  <p class="text-muted mb-2">
+    Fill in the observation values required by the care plan. Units and
+    limits come from the plan definition. Use <strong>+ Add reading</strong>
+    to submit several observations for the same measurement (e.g. a diary).
+  </p>
   <form method="post">
     <input type="hidden" name="obs_count" value="{{ transactions|length }}">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Concept</th>
-            <th>Required</th>
-            <th style="width:180px">Value</th>
-            <th style="width:200px">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for tx in transactions %}
-          <tr>
-            <td>
-              <strong>{{ tx.concept_name }}</strong>
-              {% if tx.unit %}<span class="text-muted"> ({{ tx.unit }})</span>{% endif %}
-              <br><span class="text-muted monospace" style="font-size:10px">{{ tx.concept_guid }}</span>
-              <input type="hidden" name="transaction_guid_{{ loop.index0 }}" value="{{ tx.transaction_guid }}">
-              <input type="hidden" name="activity_guid_{{ loop.index0 }}" value="{{ tx.activity_guid }}">
-              <input type="hidden" name="concept_guid_{{ loop.index0 }}" value="{{ tx.concept_guid }}">
-              <input type="hidden" name="concept_name_{{ loop.index0 }}" value="{{ tx.concept_name }}">
-            </td>
-            <td>
-              {% if tx.requirement_type == 'recommended' %}
-                <span class="badge badge-info">Recommended</span>
-              {% else %}
-                <span class="badge badge-warning">Required</span>
-              {% endif %}
-            </td>
-            <td>
-              <input type="text" name="value_{{ loop.index0 }}" class="form-control"
-                     placeholder="Enter value"
-                     {% if tx.requirement_type != 'recommended' %}required{% endif %}>
-            </td>
-            <td>
-              <input type="text" name="notes_{{ loop.index0 }}" class="form-control" placeholder="Optional">
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    {% for tx in transactions %}
+    {% set i = loop.index0 %}
+    <div class="card" style="margin:.5rem 0;padding:.75rem 1rem;background:var(--bg-secondary,#f8f9fa);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;">
+        <div>
+          <strong>{{ tx.concept_name }}</strong>
+          {% if tx.kind and tx.kind != 'text' %}<span class="text-muted" style="font-size:.8em;"> · {{ tx.kind }}</span>{% endif %}
+          <div class="text-muted monospace" style="font-size:10px;">{{ tx.concept_guid }}</div>
+        </div>
+        <div style="text-align:right;">
+          {% if (tx.requirement_type or 'required') == 'required' %}
+            <span class="badge badge-warning">Required</span>
+          {% elif tx.requirement_type == 'recommended' %}
+            <span class="badge badge-info">Recommended</span>
+          {% else %}
+            <span class="badge">Optional</span>
+          {% endif %}
+          <div class="text-muted" style="font-size:.8em;margin-top:.15rem;">
+            {% if tx.min is not none or tx.max is not none %}
+              Limits: {{ tx.min if tx.min is not none else '−∞' }} – {{ tx.max if tx.max is not none else '∞' }}{% if tx.unit %} {{ tx.unit }}{% endif %}
+            {% elif tx.unit %}
+              Unit: {{ tx.unit }}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% if tx.anchor_low or tx.anchor_high %}
+      <div class="text-muted" style="font-size:.8em;">{{ tx.anchor_low or '' }}{% if tx.anchor_low and tx.anchor_high %} ⟶ {% endif %}{{ tx.anchor_high or '' }}</div>
+      {% endif %}
+
+      <input type="hidden" name="transaction_guid_{{ i }}" value="{{ tx.transaction_guid }}">
+      <input type="hidden" name="activity_guid_{{ i }}" value="{{ tx.activity_guid }}">
+      <input type="hidden" name="concept_guid_{{ i }}" value="{{ tx.concept_guid }}">
+      <input type="hidden" name="concept_name_{{ i }}" value="{{ tx.concept_name }}">
+      <input type="hidden" name="kind_{{ i }}" value="{{ tx.kind }}">
+      <input type="hidden" name="response_type_{{ i }}" value="{{ tx.response_type }}">
+
+      <div class="readings" id="readings-{{ i }}" data-nextj="1">
+        {{ reading(i, 0, tx, first=True) }}
+      </div>
+      <template id="tpl-{{ i }}">{{ reading(i, '__J__', tx, first=False) }}</template>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="addReading({{ i }})"
+              style="margin-top:.25rem;">+ Add reading</button>
     </div>
+    {% endfor %}
+
     <div class="form-group" style="margin-top:1rem">
       <label for="notes">General Notes (optional)</label>
       <textarea id="notes" name="notes" class="form-control" rows="2"></textarea>
@@ -69,6 +127,23 @@
     </div>
   </form>
 </div>
+
+<script>
+function addReading(i) {
+  var box = document.getElementById('readings-' + i);
+  var tpl = document.getElementById('tpl-' + i);
+  var j = parseInt(box.dataset.nextj, 10);
+  var html = tpl.innerHTML.replace(/__J__/g, j);
+  var wrap = document.createElement('div');
+  wrap.innerHTML = html.trim();
+  var row = wrap.firstElementChild;
+  box.appendChild(row);
+  box.dataset.nextj = (j + 1);
+  // A cloned <input type=range> needs its output re-synced.
+  var rng = row.querySelector('input[type=range]');
+  if (rng) { var o = rng.nextElementSibling; if (o) o.value = rng.value; }
+}
+</script>
 {% endif %}
 
 <div class="card" {% if transactions %}style="margin-top:1.5rem"{% endif %}>

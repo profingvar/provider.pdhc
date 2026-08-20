@@ -173,9 +173,62 @@ def submit_report(receipt_token):
                         'requirement_type': 'required',
                     })
 
+    # Enrich each requested observation with plan.pdhc widget metadata
+    # (response widget kind, unit, limits, slider anchors, options,
+    # requirement_type) so the form renders proper inputs and the values
+    # we emit match the gateway's canonical response_type. Fail-soft: an
+    # unreachable plan.pdhc leaves the plain text-input fallback.
+    from ..services import plan_client
+    _cp = cached.careplan_json if (cached and cached.careplan_json) else {}
+    meta_by_concept = plan_client.concept_form_meta(
+        plan_client.plandef_guid_from_careplan(_cp))
+    for tx in transactions:
+        m = meta_by_concept.get(tx.get('concept_guid'))
+        if m:
+            tx['kind'] = m['kind']
+            tx['response_type'] = m['response_type']
+            tx['unit'] = m['unit'] or tx.get('unit', '')
+            tx['min'] = m['min']
+            tx['max'] = m['max']
+            tx['step'] = m['step']
+            tx['anchor_low'] = m['anchor_low']
+            tx['anchor_high'] = m['anchor_high']
+            tx['options'] = m['options']
+            tx['requirement_type'] = m['requirement_type'] or tx.get('requirement_type')
+        else:
+            tx.setdefault('kind', 'text')
+            tx.setdefault('response_type', 'numeric')
+
     if request.method == 'POST':
         import json
         from datetime import datetime as dt, timezone as tz
+
+        def _coerce(raw, kind, rtype):
+            """(value, response_type) for one reading, or raises ValueError
+            for an unparseable numeric. Casts to the JSON type the gateway
+            validates the concept's canonical response_type against."""
+            if kind in ('number', 'integer', 'slider'):
+                return float(raw), 'numeric'
+            if kind == 'boolean':
+                return (raw.strip().lower() in ('true', '1', 'yes', 'on', 'ja')), 'boolean'
+            if kind in ('single_choice', 'multi_choice'):
+                return raw, 'categorical'
+            # text / unknown: try numeric first (gateway-safe), else text
+            try:
+                return float(raw), 'numeric'
+            except ValueError:
+                return raw, (rtype or 'text')
+
+        def _to_iso(s, default_iso):
+            if not s:
+                return default_iso
+            try:
+                d = dt.fromisoformat(s)
+                if d.tzinfo is None:
+                    d = d.replace(tzinfo=tz.utc)
+                return d.isoformat()
+            except ValueError:
+                return default_iso
 
         # Check if this is a guided form submission (has obs_count)
         obs_count = request.form.get('obs_count')
@@ -186,24 +239,40 @@ def submit_report(receipt_token):
                 transaction_guid = request.form.get(f'transaction_guid_{i}', '')
                 activity_guid = request.form.get(f'activity_guid_{i}', '')
                 concept_guid = request.form.get(f'concept_guid_{i}', '')
-                value_raw = request.form.get(f'value_{i}', '').strip()
-                if not value_raw:
-                    continue  # skip empty observations
-                try:
-                    value = float(value_raw)
-                except ValueError:
-                    value = value_raw
-                obs = {
-                    'transaction_guid': transaction_guid or concept_guid,
-                    'activity_guid': activity_guid,
-                    'concept_guid': concept_guid,
-                    'value': value,
-                    'recorded_at': now_iso,
-                }
-                obs_notes = request.form.get(f'notes_{i}', '').strip()
-                if obs_notes:
-                    obs['notes'] = obs_notes
-                observations.append(obs)
+                kind = request.form.get(f'kind_{i}', '') or 'text'
+                rtype = request.form.get(f'response_type_{i}', '') or 'numeric'
+                concept_name = request.form.get(f'concept_name_{i}', '')
+                # One concept may have several readings (repeatable rows):
+                # value_{i}_{j}. Collect every j present rather than tracking
+                # a per-concept count, so client-added rows are picked up.
+                read_idxs = sorted({
+                    int(k.rsplit('_', 1)[1]) for k in request.form
+                    if k.startswith(f'value_{i}_') and k.rsplit('_', 1)[1].isdigit()
+                })
+                for j in read_idxs:
+                    value_raw = request.form.get(f'value_{i}_{j}', '').strip()
+                    if not value_raw:
+                        continue  # skip empty readings
+                    try:
+                        value, eff_rtype = _coerce(value_raw, kind, rtype)
+                    except ValueError:
+                        flash(f'"{concept_name or concept_guid}": '
+                              f'"{value_raw}" is not a valid number', 'error')
+                        return render_template('report_form.html', task=task,
+                                               transactions=transactions)
+                    obs = {
+                        'transaction_guid': transaction_guid or concept_guid,
+                        'activity_guid': activity_guid,
+                        'concept_guid': concept_guid,
+                        'value': value,
+                        'response_type': eff_rtype,
+                        'recorded_at': _to_iso(
+                            request.form.get(f'recorded_{i}_{j}', '').strip(), now_iso),
+                    }
+                    obs_notes = request.form.get(f'note_{i}_{j}', '').strip()
+                    if obs_notes:
+                        obs['notes'] = obs_notes
+                    observations.append(obs)
 
             if not observations:
                 flash('Please fill in at least one observation value', 'error')
