@@ -152,18 +152,35 @@ class UpstreamClient:
     # ── Helpers ──────────────────────────────────────────────
 
     def _check_response(self, resp, operation):
+        if resp.status_code in (200, 201, 202):
+            return
+        # Surface the upstream's ACTUAL error code + message rather than
+        # collapsing every status into a generic label. A 403 from the
+        # gateway may be GRANT_EXPIRED, SCOPE_VIOLATION, or a genuine
+        # scope/permission denial — flattening them all to "insufficient
+        # permissions" hides the real cause from the operator/provider.
+        up_code, up_msg = None, None
+        try:
+            body = resp.json()
+            if isinstance(body, dict):
+                up_code = body.get('code') or body.get('error')
+                up_msg = body.get('message')
+        except Exception:
+            pass
+        detail = (f'{up_code}: {up_msg}' if up_code and up_msg
+                  else (up_msg or up_code or (resp.text or '')[:200]))
         if resp.status_code == 401:
             raise APIError(
-                f'Upstream auth failed on {operation}: invalid token',
-                code='UPSTREAM_AUTH_FAILED', status_code=502,
+                f'Upstream auth failed on {operation}: {detail or "invalid token"}',
+                code=up_code or 'UPSTREAM_AUTH_FAILED', status_code=502,
             )
         if resp.status_code == 403:
             raise APIError(
-                f'Upstream auth denied on {operation}: insufficient permissions',
-                code='UPSTREAM_AUTH_DENIED', status_code=502,
+                f'Upstream denied {operation}: {detail or "forbidden"}',
+                code=up_code or 'UPSTREAM_AUTH_DENIED', status_code=502,
             )
-        if resp.status_code not in (200, 201, 202):
-            raise APIError(
-                f'Upstream error on {operation}: HTTP {resp.status_code}',
-                code='UPSTREAM_ERROR', status_code=502,
-            )
+        raise APIError(
+            f'Upstream error on {operation}: HTTP {resp.status_code}'
+            + (f' — {detail}' if detail else ''),
+            code=up_code or 'UPSTREAM_ERROR', status_code=502,
+        )
