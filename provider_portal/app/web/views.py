@@ -136,7 +136,7 @@ def submit_report(receipt_token):
                         'requirement_type': tx.get('requirement_type') or 'required',
                     })
             else:
-                # Fallback: read from detail.code.coding
+                # Fallback 1: legacy detail.code.coding shape.
                 detail = activity.get('detail', {})
                 for coding in detail.get('code', {}).get('coding', []):
                     transactions.append({
@@ -144,6 +144,31 @@ def submit_report(receipt_token):
                         'activity_guid': activity_guid,
                         'concept_guid': coding.get('code', ''),
                         'concept_name': coding.get('display', ''),
+                        'unit': '',
+                        'requirement_type': 'required',
+                    })
+                # Fallback 2: the R5 goal-concept shape that request.pdhc /
+                # gateway now emit — activity[].performedActivity[].concept.
+                # These careplans carry no _pdhc_transactions sidecar, so the
+                # guided form used to render empty (only the JSON box showed).
+                # The concept code here is the transaction's concept_guid
+                # (fhir_builder._build_r5_activity emits txn['concept_guid']),
+                # which gateway.report_ingestion maps back to the real
+                # transaction via its concept_guid→txn lookup — so sending the
+                # concept guid as transaction_guid is resolved correctly on the
+                # return leg.
+                for pa in activity.get('performedActivity', []):
+                    concept = pa.get('concept', {}) if isinstance(pa, dict) else {}
+                    codings = concept.get('coding') or []
+                    coding = codings[0] if codings else {}
+                    code = coding.get('code', '')
+                    if not code:
+                        continue
+                    transactions.append({
+                        'transaction_guid': code,
+                        'activity_guid': activity_guid,
+                        'concept_guid': code,
+                        'concept_name': coding.get('display') or concept.get('text', ''),
                         'unit': '',
                         'requirement_type': 'required',
                     })

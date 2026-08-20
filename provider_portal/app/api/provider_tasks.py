@@ -68,6 +68,21 @@ def submit_report(receipt_token):
                             'concept_name': coding.get('display', ''),
                             'requirement_type': 'required',
                         })
+                    # R5 goal-concept shape (performedActivity[].concept) —
+                    # gateway maps the concept guid back to the transaction.
+                    for pa in activity.get('performedActivity', []):
+                        concept = pa.get('concept', {}) if isinstance(pa, dict) else {}
+                        codings = concept.get('coding') or []
+                        coding = codings[0] if codings else {}
+                        code = coding.get('code', '')
+                        if not code:
+                            continue
+                        transactions.append({
+                            'transaction_guid': code,
+                            'concept_guid': code,
+                            'concept_name': coding.get('display') or concept.get('text', ''),
+                            'requirement_type': 'required',
+                        })
             GuidedResponseService.validate_observations(provider_payload['observations'], transactions)
         except APIError as e:
             if e.code == 'CAREPLAN_NOT_FOUND':

@@ -177,6 +177,24 @@
       <p class="text-muted" style="margin:0.25rem 0">Performer: {{ detail.performer[0].display }}</p>
     {% endif %}
 
+    {# Fallback for CarePlans that express measurements as
+       activity[].performedActivity[].concept (the R5 goal-concept shape
+       request.pdhc/gateway emit) rather than activity[].detail. Without
+       this the activity card renders blank even though the concepts are
+       present in the stored careplan. #}
+    {% if act.performedActivity %}
+      <ul style="margin:0.35rem 0 0; padding-left:1.1rem">
+      {% for pa in act.performedActivity %}
+        {% set coding = (pa.concept.coding[0] if pa.concept and pa.concept.coding else none) %}
+        {% if coding %}
+          <li>{{ coding.display or coding.code }}</li>
+        {% elif pa.concept and pa.concept.text %}
+          <li>{{ pa.concept.text }}</li>
+        {% endif %}
+      {% endfor %}
+      </ul>
+    {% endif %}
+
     {% set txns = act['_pdhc_transactions'] if '_pdhc_transactions' in act else [] %}
     {% if txns %}
     <div class="table-wrap" style="margin-top:0.5rem">
