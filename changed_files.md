@@ -111,3 +111,6 @@
 | provider_portal/app/services/upstream_client.py | 2026-05-13 — `submit_report()` gained optional `path` parameter (default `/provider/report`). Used to direct status-only calls to request.pdhc's canonical `/provider/status` path. |
 | provider_portal/tests/test_status_callback.py | 2026-05-13 — NEW. 4 tests covering: (1) missing GATEWAY_SERVICE_URL with payload → no upstream push + ERROR log, (2) full config → push goes to gateway not request, (3) status-only routes to request.pdhc, (4) missing grant_token blocks the push. Tests pass when isolated; bundled-run fails on pre-existing `keyauth_users` table-redef issue. |
 - provider.pdhc/docs/provider_technical_guide.md (Port Allocation section)
+
+## 2026-10-15 — #708 sibling smoke
+- deploy/smoke_siblings.py  (NEW: 11 read-only checks against request, gateway, plan)
