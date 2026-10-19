@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-provider_portal}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-provider_portal_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-provider_portal_db}
     ports:
       # Ticket #76: pin host interface so only localhost (= reverse proxy) can
@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-provider_portal}:${POSTGRES_PASSWORD:-provider_portal_dev}@db:5432/${POSTGRES_DB:-provider_portal_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-provider_portal}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-provider_portal_db}
     ports:
       - "127.0.0.1:9070:9070"
     depends_on:
