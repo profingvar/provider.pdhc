@@ -158,5 +158,33 @@ have THREE INDEPENDENT real directories, not symlinks, all holding the
 pre-#563 copy. So a fix made on the Mac does not propagate to production here,
 and a fix made in production to one service does not reach the other two.
 
-Open: whether to consume it as a submodule or a package (#943 holds that
-decision, since it is the same question as the 14 modules copied across repos).
+Open: whether to consume it as a submodule or a package. This line used to say
+"#943 holds that decision, since it is the same question as the 14 modules
+copied across repos". #943 was CLOSED 2026-11-06 with its premise disproved:
+there is no 14-module problem (its largest group was Flask-Migrate's generated
+migrations/env.py, in 14 repos), session_headers.py has ONE code variant across
+seven repos rather than four, and the copies are a documented deliberate choice.
+So pdhc_keyauth is now the only live instance of this question and must be
+decided on its own merits. See CLAUDE.md §4.
+
+
+--- 2026-11-06 — #945: rotation test asserted a flag, not a decision ---
+
+provider_portal/tests/test_security.py   test_key_rotation_api strengthened
+
+Found by mutation-testing the cgm.pdhc port of this file. Of the six tests,
+test_key_rotation_api was the ONLY one that could not see the enforcement being
+removed: under a mutation making ApiKey.is_valid() always return True, and
+under one making authenticate() stop calling it, this test still passed. It
+asserted `api_key.revoked is True` — a field value — and that the NEW key
+works, but never that the OLD secret stops working, which is the whole point of
+rotating.
+
+Added that assertion. It now fails under both mutations, as the other three
+rejection tests already did.
+
+The enforcement modules are byte-identical between the two services: restoring
+them after each mutation produced the same sha256 in both repos
+(api_key.py 54b0059bf189, access_session.py 12b3c98bbaee).
+
+Suite: 97 passed, before and after (an assertion was added, not a test).

@@ -48,6 +48,15 @@ def test_key_rotation_api(client, provider, api_key, auth_headers, app):
     resp = client.get('/api/v1/provider-tasks/my', headers=new_headers)
     assert resp.status_code == 200
 
+    # And the OLD secret must stop working (#945). The `revoked is True`
+    # assertion above is a field value, not a decision: under a mutation that
+    # makes ApiKey.is_valid() always return True, it still holds while the
+    # rotated-away key is accepted. Found by mutation-testing the cgm.pdhc
+    # port of this file, where this test was the only one of the six that
+    # could not see the enforcement being removed.
+    resp = client.get('/api/v1/provider-tasks/my', headers={'X-API-Key': 'test-api-key'})
+    assert resp.status_code == 401
+
 
 def test_key_revocation_api(client, provider, api_key, auth_headers, app):
     # Create a second key first so we can still auth after revoking
