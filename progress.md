@@ -131,3 +131,13 @@
 **Total tests: 90/90 passed**
 
 **All phases (1–7) complete.**
+
+---
+
+### 2026-11-23 — #1011: plan_client sends provider1's read_only plan key (LOCAL ONLY, not deployed)
+- **Why**: plan.pdhc gates its API reads (stage 3 of #931). plan's read_shadow log showed provider1 as the one keyless consumer left: 75 unkeyed reads in two days (`/plandefinitions/<g>`, `/concepts`, `/concepts/<g>`). `plan_client` is fail-soft, so a refused read would have reduced every guided form to text inputs with no error.
+- **Change**: `plan_client.plan_read_headers()` -> `X-Source-Service` (`PLAN_SOURCE_SERVICE`, default `provider1.pdhc`) + `X-Service-Key` (`PLAN_SERVICE_KEY`), the pair request/dashboard/cdr send. Unset key: the call still goes out (fail-soft unchanged) and ONE warning names the variable. `config.py` + `.env.example` carry both variables.
+- **Smoke** (`deploy/smoke_siblings.py`): plan probes carry the client's own headers; the concepts check fails on 401/403 by name; new check proves the key on plan's already-gated `/lookup/concept-types` (bare 401, keyed 200). Exercised locally against a faked gated plan: key right -> all plan checks OK; key unset or wrong -> the two credential checks FAIL with the reason.
+- **Mirror**: `plan_client.py` is provider-only (cgm has no copy and never calls plan); `config.py` and `.env.example` are in the drifted set. Nothing mirrored (CLAUDE.md §4, #946).
+- **Tests**: `tests/test_plan_client_key_1011.py` (6; the header path and the warn-once both mutation-checked; a control reproduces the degraded form without the key). Suite 97 before -> 103 after.
+- **Deploy**: needs plan's `PROVIDER1_PDHC_SERVICE_KEY` and this service's `PLAN_SERVICE_KEY` set to the same value — operator script `~/T7_sidewinder/plans/plan_read_gating_1011/ops/pk1_provider1_key.sh`. Deploy this client BEFORE plan's gating groups.

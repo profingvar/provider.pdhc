@@ -243,3 +243,11 @@ are deliberate domain difference, not debt, and are not to be reconciled. The
 identical 23 REMAIN a hand-mirrored shared set — ratifying divergence did not
 dissolve them, so "diverge" does not mean "mirror nothing". Replacing the hand
 with a mechanism is a separate decision. Recorded in CLAUDE.md §4.
+
+## #1011 — plan_client sends the read_only plan key (2026-11-23)
+- /Users/martiningvar/T7_sidewinder/provider.pdhc/provider_portal/app/services/plan_client.py — plan_read_headers(), sent on every plan read; warn once when unset
+- /Users/martiningvar/T7_sidewinder/provider.pdhc/provider_portal/config.py — PLAN_SOURCE_SERVICE, PLAN_SERVICE_KEY
+- /Users/martiningvar/T7_sidewinder/provider.pdhc/provider_portal/.env.example — PLAN_BASE_URL, PLAN_SOURCE_SERVICE, PLAN_SERVICE_KEY
+- /Users/martiningvar/T7_sidewinder/provider.pdhc/deploy/smoke_siblings.py — keyed plan probes; key-accepted check
+- /Users/martiningvar/T7_sidewinder/provider.pdhc/provider_portal/tests/test_plan_client_key_1011.py (NEW)
+- /Users/martiningvar/T7_sidewinder/provider.pdhc/progress.md, /Users/martiningvar/T7_sidewinder/provider.pdhc/changed_files.md
