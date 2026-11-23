@@ -11,6 +11,12 @@ JSON value types we emit match what gateway.ObservationValidator expects.
 
 Fail-soft: any error returns an empty map so the form degrades to plain
 text inputs rather than breaking submission.
+
+Credential (#1011): plan's reads are gated, so every call sends
+`plan_read_headers()` — this instance's read_only service key. That
+fail-soft is exactly why the key matters: without it plan answers 401, the
+map comes back empty, and the provider sees text boxes with no error. A
+missing key is therefore logged ONCE, by name, instead of silently.
 """
 import time
 import logging
@@ -42,8 +48,31 @@ def _base():
     return (current_app.config.get('PLAN_BASE_URL') or 'https://plan.pdhc.se').rstrip('/')
 
 
+_warned_missing_key = False
+
+
+def plan_read_headers():
+    """X-Source-Service + X-Service-Key for plan.pdhc, or {} when unset.
+
+    Same pair as request/dashboard/cdr after #931. Unset sends nothing rather
+    than a blank key (plan would answer 403 to a named service with an empty
+    key; 401 for no credential is the clearer refusal), and warns once.
+    """
+    global _warned_missing_key
+    key = (current_app.config.get('PLAN_SERVICE_KEY') or '').strip()
+    if not key:
+        if not _warned_missing_key:
+            _warned_missing_key = True
+            logger.warning('plan_client: PLAN_SERVICE_KEY is not set, so plan.pdhc '
+                           'will refuse these reads and guided forms degrade to '
+                           'text inputs (#1011)')
+        return {}
+    src = (current_app.config.get('PLAN_SOURCE_SERVICE') or '').strip() or 'provider1.pdhc'
+    return {'X-Source-Service': src, 'X-Service-Key': key}
+
+
 def _get(path):
-    r = requests.get(f"{_base()}/api/v1{path}", timeout=8)
+    r = requests.get(f"{_base()}/api/v1{path}", headers=plan_read_headers(), timeout=8)
     r.raise_for_status()
     return r.json()
 

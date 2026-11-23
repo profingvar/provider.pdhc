@@ -29,10 +29,15 @@ class Config:
 
     # plan.pdhc — authority on per-concept response type / unit / limits.
     # Used to render the guided report form's widgets (number/slider/
-    # boolean/choice) with the care plan's units and limits. Public read
-    # (no auth). Inside the container the loopback default is unreachable,
-    # so the server .env points this at host.docker.internal:9030.
+    # boolean/choice) with the care plan's units and limits.
     PLAN_BASE_URL = os.environ.get('PLAN_BASE_URL', 'https://plan.pdhc.se')
+    # #1011: plan's reads are no longer public. plan admits this instance as
+    # a read_only service key: X-Source-Service + X-Service-Key, the pair
+    # request/dashboard/cdr send since #931. The key must be byte-identical
+    # to PROVIDER1_PDHC_SERVICE_KEY in plan's .env. Unset: the client still
+    # calls (fail-soft) and logs one WARNING naming the variable.
+    PLAN_SOURCE_SERVICE = os.environ.get('PLAN_SOURCE_SERVICE', 'provider1.pdhc')
+    PLAN_SERVICE_KEY = os.environ.get('PLAN_SERVICE_KEY', '')
 
     # Sync settings
     SYNC_INTERVAL_SECONDS = int(os.environ.get('SYNC_INTERVAL_SECONDS', '60'))

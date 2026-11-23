@@ -76,7 +76,9 @@ PROBED_PATHS = {
 
 #: Probed but composed inline here, with no client module to drift from:
 #:   /api/health, /api/v1/health  — bare liveness pings.
-INLINE_PATHS = ("/api/health", "/api/v1/health")
+INLINE_PATHS = ("/api/health", "/api/v1/health",
+                # #1011: plan's already-gated read, used to prove the key.
+                "/api/v1/lookup/concept-types")
 
 NOBODY = "00000000-0000-4000-8000-000000000000"
 
@@ -158,6 +160,10 @@ def main(as_json: bool = False) -> int:
         req = (cfg.get("REQUEST_SERVICE_URL") or "").rstrip("/")
         gw = (cfg.get("GATEWAY_SERVICE_URL") or "").rstrip("/")
         plan = (cfg.get("PLAN_BASE_URL") or "").rstrip("/")
+        # #1011: plan's reads are gated; the probes carry the SAME pair the
+        # client sends, built by the client's own function.
+        from app.services.plan_client import plan_read_headers
+        plan_h = plan_read_headers()
 
         @check("paths: every probed path appears in its client module")
         def _():
@@ -288,7 +294,8 @@ def main(as_json: bool = False) -> int:
         def _():
             if not plan:
                 return False, "PLAN_BASE_URL not set"
-            code, _b = _probe(f"{plan}/api/v1/plandefinitions/{NOBODY}")
+            code, _b = _probe(f"{plan}/api/v1/plandefinitions/{NOBODY}",
+                              headers=plan_h)
             if code == 404:
                 return True, ("404 — AMBIGUOUS: the path, or that plan "
                               "definition. The concepts check below reads a "
@@ -306,13 +313,31 @@ def main(as_json: bool = False) -> int:
             # end of a contract.
             if not plan:
                 return False, "PLAN_BASE_URL not set"
-            code, body = _probe(f"{plan}/api/v1/concepts")
+            code, body = _probe(f"{plan}/api/v1/concepts", headers=plan_h)
+            if code in (401, 403):
+                return False, (f"{code} — plan REFUSES provider1's credential "
+                               "(PLAN_SERVICE_KEY unset or wrong), so every "
+                               "guided form degrades to text inputs, silently")
             if code == 404:
                 return False, ("404 — every guided form degrades to plain "
                                "text inputs, silently")
             if 200 <= code < 300:
                 return True, f"200 ({len(body)} bytes of body)"
             return _exists(code)
+
+        @check("plan: the read_only key is ACCEPTED on a gated read (#1011)")
+        def _():
+            # concept-types has been gated since #925: bare must be 401 (so the
+            # gate is real) and keyed must be 200 (so the key is the right one).
+            if not plan:
+                return False, "PLAN_BASE_URL not set"
+            if not plan_h:
+                return False, "PLAN_SERVICE_KEY not set"
+            url = f"{plan}/api/v1/lookup/concept-types"
+            bare, _b = _probe(url)
+            keyed, _k = _probe(url, headers=plan_h)
+            ok = bare == 401 and keyed == 200
+            return ok, f"bare {bare} (want 401), keyed {keyed} (want 200)"
 
         @check("plan: provider's own client returns {} for an absent plandef")
         def _():
