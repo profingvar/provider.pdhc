@@ -141,3 +141,6 @@
 - **Mirror**: `plan_client.py` is provider-only (cgm has no copy and never calls plan); `config.py` and `.env.example` are in the drifted set. Nothing mirrored (CLAUDE.md §4, #946).
 - **Tests**: `tests/test_plan_client_key_1011.py` (6; the header path and the warn-once both mutation-checked; a control reproduces the degraded form without the key). Suite 97 before -> 103 after.
 - **Deploy**: needs plan's `PROVIDER1_PDHC_SERVICE_KEY` and this service's `PLAN_SERVICE_KEY` set to the same value — operator script `~/T7_sidewinder/plans/plan_read_gating_1011/ops/pk1_provider1_key.sh`. Deploy this client BEFORE plan's gating groups.
+
+## #1011 DEPLOYED 2026-11-24
+plan_client sends provider1 key (2c36fa0) deployed after the operator set PLAN_SOURCE_SERVICE/PLAN_SERVICE_KEY (pk1). Smoke 12/12 incl. keyed 200 / bare 401 on a gated read.
